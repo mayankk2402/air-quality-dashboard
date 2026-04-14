@@ -8,7 +8,9 @@ import math
 
 # --- CONFIGURATION ---
 st.set_page_config(page_title="Air Quality & Health Dashboard", page_icon="🌍", layout="wide")
-API_KEY = "5f5d358e200291f8b5ba8c5b504aac0b" # Put your OpenWeatherMap key here!
+
+# IMPORTANT: Replace this with your actual OpenWeatherMap API Key
+API_KEY = "5f5d358e200291f8b5ba8c5b504aac0b"
 
 # --- UI: HEADER & LOCATION INPUT ---
 st.title("🌍 Real-Time Air Quality & Health Risk Dashboard")
@@ -22,8 +24,16 @@ if city:
     geo_url = f"http://api.openweathermap.org/geo/1.0/direct?q={city}&limit=1&appid={API_KEY}"
     geo_response = requests.get(geo_url).json()
     
-    if len(geo_response) == 0:
-        st.error("City not found. Please check the spelling.")
+    # SAFEGUARD 1: Check if the API sent an error dictionary instead of a list
+    if isinstance(geo_response, dict):
+        st.error(f"API Error: {geo_response.get('message', 'Unknown API Error')}")
+        st.write("Raw API Response:", geo_response)
+        
+    # SAFEGUARD 2: Check if the list is empty (city not found)
+    elif len(geo_response) == 0:
+        st.warning("City not found. Please check the spelling.")
+        
+    # THE HAPPY PATH: We got a valid list!
     else:
         lat = geo_response[0]['lat']
         lon = geo_response[0]['lon']
@@ -66,7 +76,7 @@ if city:
         # Display large metrics side-by-side
         col1, col2, col3 = st.columns(3)
         col1.metric("Current PM2.5", f"{current_pm25} μg/m³")
-        col2.metric("Air Quality Status", status.split(" ")[1])
+        col2.metric("Air Quality Status", status.split(" ", 1)[1] if " " in status else status)
         col3.metric("Cigarette Equivalent", f"🚬 {cigarettes_smoked} cigs")
 
         # Display Advice
@@ -84,11 +94,12 @@ if city:
             ax1.axhline(y=15, color='red', linestyle='--', label='WHO Safe Limit')
             ax1.set_title("PM2.5 Trend (Next 120 Hours)")
             ax1.set_ylabel("μg/m³")
-            st.pyplot(fig1) # This is how Streamlit renders Matplotlib!
+            ax1.tick_params(axis='x', rotation=45) # Rotates dates so they don't overlap
+            st.pyplot(fig1)
             
         with chart_col2:
             fig2, ax2 = plt.subplots(figsize=(8, 5))
             corr = df[['PM2.5', 'PM10', 'NO2']].corr()
-            sns.heatmap(corr, annot=True, cmap='coolwarm', ax=ax2)
+            sns.heatmap(corr, annot=True, cmap='coolwarm', ax=ax2, vmin=-1, vmax=1)
             ax2.set_title("Pollutant Correlation Heatmap")
             st.pyplot(fig2)
