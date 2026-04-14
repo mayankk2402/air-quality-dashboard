@@ -10,7 +10,7 @@ import math
 st.set_page_config(page_title="Air Quality & Health Dashboard", page_icon="🌍", layout="wide")
 
 # IMPORTANT: Replace this with your actual OpenWeatherMap API Key
-API_KEY = "5f5d358e200291f8b5ba8c5b504aac0b"
+API_KEY = "f7c41b7f0c3edcec6de8f1e1f65aebc0"
 
 # --- UI: HEADER & LOCATION INPUT ---
 st.title("🌍 Real-Time Air Quality & Health Risk Dashboard")
