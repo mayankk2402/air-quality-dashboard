@@ -4,7 +4,6 @@ import pandas as pd
 from datetime import datetime
 import matplotlib.pyplot as plt
 import seaborn as sns
-import math
 
 # --- CONFIGURATION ---
 st.set_page_config(page_title="Air Quality & Health Dashboard", page_icon="🌍", layout="wide")
@@ -14,26 +13,27 @@ API_KEY = "f7c41b7f0c3edcec6de8f1e1f65aebc0"
 
 # --- UI: HEADER & LOCATION INPUT ---
 st.title("🌍 Real-Time Air Quality & Health Risk Dashboard")
+
+# Display the exact time the data was requested
+current_time = datetime.now().strftime("%A, %B %d, %Y at %I:%M %p")
+st.caption(f"🔄 Data requested and live-synced on: **{current_time}**")
+
 st.markdown("Enter your city below to get a real-time health analysis based on current atmospheric sensors.")
 
 # The search bar for the user
 city = st.text_input("Enter City Name (e.g., Pune, Mumbai, London):", "Pune")
 
 if city:
-    # --- STEP 1: GEOCODING (Convert City to Lat/Lon) ---
+    # --- STEP 1: GEOCODING ---
     geo_url = f"http://api.openweathermap.org/geo/1.0/direct?q={city}&limit=1&appid={API_KEY}"
     geo_response = requests.get(geo_url).json()
     
-    # SAFEGUARD 1: Check if the API sent an error dictionary instead of a list
     if isinstance(geo_response, dict):
         st.error(f"API Error: {geo_response.get('message', 'Unknown API Error')}")
-        st.write("Raw API Response:", geo_response)
         
-    # SAFEGUARD 2: Check if the list is empty (city not found)
     elif len(geo_response) == 0:
         st.warning("City not found. Please check the spelling.")
         
-    # THE HAPPY PATH: We got a valid list!
     else:
         lat = geo_response[0]['lat']
         lon = geo_response[0]['lon']
@@ -42,12 +42,12 @@ if city:
         aqi_url = f"http://api.openweathermap.org/data/2.5/air_pollution/forecast?lat={lat}&lon={lon}&appid={API_KEY}"
         raw_data = requests.get(aqi_url).json()
         
-        # --- STEP 3: DATA PREPARATION (Pandas) ---
+        # --- STEP 3: DATA PREPARATION ---
         timestamps, aqi_list, pm25, pm10, no2 = [], [], [], [], []
         
         for item in raw_data['list']:
             timestamps.append(datetime.fromtimestamp(item['dt']))
-            aqi_list.append(item['main']['aqi']) # 1=Good, 5=Very Poor
+            aqi_list.append(item['main']['aqi']) 
             pm25.append(item['components']['pm2_5'])
             pm10.append(item['components']['pm10'])
             no2.append(item['components']['no2'])
@@ -61,7 +61,7 @@ if city:
         })
         df.set_index('Datetime', inplace=True)
 
-        # --- STEP 4: CALCULATE METRICS ---
+        # --- STEP 4: CALCULATE CURRENT METRICS ---
         current_aqi = int(df['AQI'].iloc[0])
         current_pm25 = df['PM2.5'].iloc[0]
         cigarettes_smoked = max(0, round(current_pm25 / 22.0, 1))
@@ -108,11 +108,10 @@ if city:
             ax1.legend()
             st.pyplot(fig1)
             
-            # 2. Automated Conclusion for Trend Plot
             st.markdown("""
-            **💡 What this tells us:** This line shows the forecasted concentration of microscopic dust (PM2.5) over the next 5 days. 
-            * If the line stays **below the dashed red limit**, the air is generally safe.
-            * Recurring spikes (like peaks at the same time every day) usually indicate rush-hour traffic or specific industrial operating hours. You should plan outdoor exercise during the lowest dips on this graph.
+            **💡 Trend Analysis:** This line charts the forecasted microscopic dust (PM2.5) over the next 5 days. 
+            * **The Red Dashed Line** represents the WHO's maximum safe exposure limit (15 μg/m³). 
+            * If the solid line repeatedly spikes at the same time every day, it indicates a strong routine pollution source, such as daily rush-hour traffic or industrial shifts. 
             """)
             
         with chart_col2:
@@ -123,8 +122,40 @@ if city:
             ax2.set_title("Pollutant & AQI Correlation Heatmap")
             st.pyplot(fig2)
             
-            # 2. Automated Conclusion for Heatmap
             st.markdown("""
-            **💡 What this tells us:** This heatmap reveals the hidden mathematical relationships between pollutants. A score close to **1.0** means two things rise and fall together.
-            * Look at the correlation between **AQI and NO2**. Since NO2 primarily comes from vehicle exhaust, a high score here strongly suggests that local traffic is the main driver of bad air quality in this city.
+            **💡 Deep Correlation Analysis:** A heatmap shows how variables interact (1.0 means perfect correlation).
+            * **PM2.5 vs PM10:** These are usually highly correlated (close to 1.0) because both are dust particles. PM10 is coarse dust (like construction), while PM2.5 is fine smoke.
+            * **AQI vs Pollutants:** Look at which pollutant has the highest correlation with AQI. That specific gas/dust is the primary "culprit" driving your city's bad air quality.
+            * **The NO₂ Factor:** Nitrogen Dioxide (NO₂) is primarily emitted by burning fuel (vehicle exhaust). If NO₂ has a high correlation with PM2.5, your city's pollution is heavily traffic-driven rather than dust-driven.
             """)
+
+        # --- STEP 7: AI ROUTINE PLANNER ---
+        st.divider()
+        st.subheader("📅 AI Routine & Activity Planner (Next 24 Hours)")
+        
+        # Slice the next 24 hours of data
+        df_24h = df.head(24)
+        
+        # Find the safest and worst hours
+        best_time_idx = df_24h['PM2.5'].idxmin()
+        worst_time_idx = df_24h['PM2.5'].idxmax()
+        
+        best_val = df_24h.loc[best_time_idx, 'PM2.5']
+        worst_val = df_24h.loc[worst_time_idx, 'PM2.5']
+        
+        # Format the times for readability
+        best_time_str = best_time_idx.strftime('%A at %I:%M %p')
+        worst_time_str = worst_time_idx.strftime('%A at %I:%M %p')
+
+        # Display the routine recommendations
+        plan_col1, plan_col2 = st.columns(2)
+        
+        with plan_col1:
+            st.success(f"### 🏃‍♂️ Safest Time to Go Out\n**{best_time_str}**")
+            st.write(f"**Expected PM2.5:** {best_val:.1f} μg/m³")
+            st.write("*This is the optimal window for outdoor activities, exercising, or opening the windows in your house to let fresh air in.*")
+            
+        with plan_col2:
+            st.error(f"### 🛑 Time to Stay Indoors\n**{worst_time_str}**")
+            st.write(f"**Expected PM2.5:** {worst_val:.1f} μg/m³")
+            st.write("*During this hour, pollution peaks. Avoid heavy outdoor exertion, keep windows closed, and run an air purifier if you have one.*")
